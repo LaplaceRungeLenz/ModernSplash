@@ -1,0 +1,3 @@
+// Reproducible runtime compatibility build; tags/releases are not required.
+project.ext.modVersion = System.getenv('VERSION') ?: '1.0.0-runtime.1'
+project.version = project.ext.modVersion
