@@ -46,7 +46,7 @@ configuration. The original upstream jar lacks this API and falls back safely.
 
 Use JDK 25 and `./gradlew build` (Windows: `gradlew.bat build`). Gradle/conventions
 match the current LegacyVisualFix build. Output remains Java 8 bytecode. The
-default development version is `1.0.0-runtime.1`; `VERSION` can override it.
+default development version is `1.0.0`; `VERSION` can override it.
 
 `CustomSplash.java` and its extracted runtime support remain LGPL-2.1; the rest
 retains the upstream licensing stated in `LICENSE`. Mojang artwork is unchanged.
