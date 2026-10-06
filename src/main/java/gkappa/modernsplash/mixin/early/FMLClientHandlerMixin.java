@@ -38,7 +38,7 @@ public class FMLClientHandlerMixin {
         method = "onInitializationComplete",
         at = @At(value = "INVOKE", target = "Lcpw/mods/fml/client/SplashProgress;finish()V"))
     private void rdFinish3() {
-        CustomSplash.finish();
+        CustomSplash.finish(true);
     }
 
     @Redirect(

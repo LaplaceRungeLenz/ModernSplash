@@ -67,6 +67,8 @@ public class CustomSplash {
     public static Drawable d;
     public static volatile boolean pause = false;
     public static volatile boolean done = false;
+    private static boolean fadeOnFinish;
+    static int fadeOutDurationMs;
     // Disabled debug state: keeping this commented avoids altering the normal splash shutdown path.
     // public static volatile boolean finishRequested = false;
     public static Thread thread;
@@ -133,6 +135,7 @@ public class CustomSplash {
 
     public static void start() {
         done = false;
+        fadeOnFinish = false;
         // Disabled debug reset: the delayed splash experiment is currently turned off.
         // finishRequested = false;
         File configFile = new File(Minecraft.getMinecraft().mcDataDir, "config/splash.properties");
@@ -162,6 +165,8 @@ public class CustomSplash {
         showArchFixMemory = getBool("showArchFixMemory", true);
         showTotalMemoryLine = getBool("showTotalMemoryLine", false);
         enableTimer = getBool("enableTimer", true);
+        // Total duration of the two-stage startup transition; zero disables it.
+        fadeOutDurationMs = Math.max(0, Math.min(10000, getInt("fadeOutDurationMs", 2000)));
 
         logoOffset = getInt("logoOffset", 0);
 
@@ -281,6 +286,7 @@ public class CustomSplash {
                 fontRenderer = new SplashFontRenderer();
                 glDisable(GL_TEXTURE_2D);
                 FrameRenderer renderer = new FrameRenderer(fontRenderer, logoTexture, forgeTexture);
+                ProgressBar finalFirst = null, finalPenult = null, finalLast = null;
                 while (!done) {
                     ProgressBar first = null, penult = null, last = null;
                     Iterator<ProgressBar> i = ProgressManager.barIterator();
@@ -293,6 +299,11 @@ public class CustomSplash {
                     }
 
                     renderer.drawFrame(first, penult, last, null, "", 0, 0);
+                    if (first != null) {
+                        finalFirst = first;
+                        finalPenult = penult;
+                        finalLast = last;
+                    }
 
                     mutex.acquireUninterruptibly();
                     Display.update();
@@ -308,6 +319,15 @@ public class CustomSplash {
                     // continue;
                     // }
                     Display.sync(Frame);
+                }
+                if (fadeOnFinish) {
+                    StartupTransition.capture(renderer, finalFirst, finalPenult, finalLast);
+                    mutex.acquireUninterruptibly();
+                    try {
+                        Display.update();
+                    } finally {
+                        mutex.release();
+                    }
                 }
                 clearGL();
             }
@@ -368,6 +388,7 @@ public class CustomSplash {
         private final Texture logoTexture;
         private final Texture forgeTexture;
         private int angle;
+        private boolean complete;
 
         FrameRenderer(SplashFontRenderer font, Texture logo, Texture forge) {
             this.fontRenderer = font;
@@ -382,6 +403,16 @@ public class CustomSplash {
 
         void drawFrame(ProgressBar first, ProgressBar penult, ProgressBar last, String reloadTitle, String reloadDetail,
             int completed, int total) {
+            drawBackgroundAndLogo();
+            drawDetails(first, penult, last, reloadTitle, reloadDetail, completed, total);
+        }
+
+        void drawCompletedFrame(ProgressBar first, ProgressBar penult, ProgressBar last) {
+            complete = true;
+            drawFrame(first, penult, last, null, "", 0, 0);
+        }
+
+        void drawBackgroundAndLogo() {
             glClearColor(
                 ((backgroundColor >> 16) & 255) / 255f,
                 ((backgroundColor >> 8) & 255) / 255f,
@@ -417,6 +448,14 @@ public class CustomSplash {
             glVertex2f(centerX + logoSize, centerY - logoSize);
             glEnd();
             glDisable(GL_TEXTURE_2D);
+        }
+
+        private void drawDetails(ProgressBar first, ProgressBar penult, ProgressBar last, String reloadTitle,
+            String reloadDetail, int completed, int total) {
+            int w = Display.getWidth();
+            int h = Display.getHeight();
+            float scale = Math.min(w / 640f, h / 480f);
+            float centerX = w / 2f;
 
             if (showMemory) {
                 glPushMatrix();
@@ -557,7 +596,7 @@ public class CustomSplash {
         }
 
         public void drawBar(ProgressBar b) {
-            drawBar(b.getTitle(), b.getMessage(), b.getStep(), b.getSteps(), true);
+            drawBar(b.getTitle(), b.getMessage(), complete ? b.getSteps() : b.getStep(), b.getSteps(), true);
         }
 
         public void drawBar(String title, String message, int step, int steps) {
@@ -803,9 +842,14 @@ public class CustomSplash {
     }
 
     public static void finish() {
+        finish(false);
+    }
+
+    public static void finish(boolean transition) {
         if (!enabled) return;
         try {
             checkThreadState();
+            fadeOnFinish = transition && fadeOutDurationMs > 0;
             // Disabled debug finish hook: do not intercept the regular splash shutdown flow.
             // finishRequested = true;
             // if (StartupDebugDelay.canFinishSplash()) {
